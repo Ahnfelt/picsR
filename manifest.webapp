@@ -1,0 +1,12 @@
+{
+  "name": "picsR",
+  "description": "For SFW and NSFW images from Reddit.",
+  "launch_path": "/index.html",
+  "icons": {
+    "128": "/icon-128.png"
+  },
+  "developer": {
+    "name": "Not not anonymous"
+  },
+  "default_locale": "en"
+}

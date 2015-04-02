@@ -1,0 +1,332 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>picsR</title>
+        <script>
+            function getJson(url, callback) {
+                var xmlhttp = new XMLHttpRequest();
+                xmlhttp.onreadystatechange = function() {
+                    if(xmlhttp.readyState == 4) {
+                        if(xmlhttp.status == 200) return callback(JSON.parse(xmlhttp.responseText));
+                        else throw "Status: " + xmlhttp.status;
+                    }
+                }
+                xmlhttp.open("GET", url, true);
+                xmlhttp.send();
+            }
+        
+            function loadHot(subreddit) {
+                var more = subreddit == null;
+                if(more) subreddit = document.getElementById('subreddit').value;
+                if(!more) clearImages();
+                if(!more) afterImageId = null;
+                document.getElementById('loader').className = 'visible';
+                document.getElementById('loadmore').className = '';
+                var escaped = encodeURIComponent(subreddit);
+                var after = afterImageId == null ? '' : '&after=' + encodeURIComponent(afterImageId);
+                getJson('https://www.reddit.com/r/' + escaped + '/hot.json?limit=100' + after, renderImages);
+            }
+            
+            function clearImages() {
+                var thumbnailsElement = document.getElementById('thumbnails');
+                while(thumbnailsElement.firstChild) thumbnailsElement.removeChild(thumbnailsElement.firstChild);
+                clearPreviewImage();
+            }
+            
+            function resetEveryting() {
+                clearImages();
+                showSubreddits('sfw');
+                document.getElementById('subreddit').value = '';
+                document.getElementById('loadmore').className = '';
+            }
+            
+            var afterImageId = null;
+            function renderImages(listing) {
+                if(afterImageId == null) clearImages();
+                document.getElementById('loader').className = '';
+                var element = document.getElementById('thumbnails');
+                var children = listing.data.children;
+                for(var i = 0; i < children.length; i++) {
+                    var child = children[i];
+                    afterImageId = child.data.name;
+                    if(child.data.thumbnail == null || child.data.thumbnail.indexOf('//') == -1) continue;
+                    var childElement = renderImage(child);
+                    element.appendChild(childElement);
+                }
+                document.getElementById('loadmore').className = children.length >= 100 ? 'visible' : '';
+            }
+            
+            function renderImage(data) {
+                var thumbnail = data.data.thumbnail;
+                var element = document.createElement('div');
+                element.onclick = function() { previewImage(data); };
+                element.className = 'thumbnail';
+                var wrapperElement = document.createElement('div');
+                wrapperElement.className = 'image';
+                var thumbnailElement = document.createElement('img');
+                thumbnailElement.src = thumbnail;
+                wrapperElement.appendChild(thumbnailElement);
+                element.appendChild(wrapperElement);
+                return element;
+            }
+            
+            function clearPreviewImage() {
+                var element = document.getElementById('preview');
+                var thumbnailElement = document.getElementById('preview-thumbnail');
+                var imageElement = document.getElementById('preview-image');
+                imageElement.src = 'ajax-loader.gif';
+                thumbnailElement.src = 'ajax-loader.gif';
+                element.className = '';
+                thumbnailElement.className = '';
+                imageElement.className = '';
+            }
+            
+            function previewImage(data) {
+                console.dir(data);
+                var element = document.getElementById('preview');
+                var thumbnailElement = document.getElementById('preview-thumbnail');
+                var imageElement = document.getElementById('preview-image');
+                var loaderElement = document.getElementById('preview-loader');
+                loaderElement.className = 'visible';
+                thumbnailElement.className = 'visible';
+                imageElement.className = '';
+                element.className = 'visible';
+                thumbnailElement.src = data.data.thumbnail;
+                var url = data.data.url;
+                if(/^https?:\/\/(i.)?imgur.com\/[^.]+$/g.test(url)) url = url + '.jpg';
+                imageElement.onload = function() { imageElement.className = 'visible'; thumbnailElement.className = ''; loaderElement.className = ''; };
+                imageElement.onerror = function() { loaderElement.className = ''; };
+                imageElement.src = url;
+            }
+            
+            var subreddits = [];
+            function loadSubreddits() {
+                var last = subreddits[subreddits.length - 1];
+                var after = last == null ? '' : '&after=' + encodeURIComponent(last.data.name);
+                getJson('https://www.reddit.com/subreddits/popular.json?limit=100' + after, function(d) { 
+                    var children = d.data.children;
+                    Array.prototype.push.apply(subreddits, children);
+                    renderSubreddits(children, 'sfw');
+                    document.getElementById('subreddits-loader').className = '';
+                });
+                getJson('https://www.reddit.com/subreddits/search.json?q=nsfw+porn&limit=100', function(d) { 
+                    var children = d.data.children;
+                    Array.prototype.push.apply(subreddits, children);
+                    renderSubreddits(children, 'nfsw');
+                    document.getElementById('subreddits-loader').className = '';
+                });
+            }
+            
+            function renderSubreddits(children, category) {
+                var sfwElement = document.getElementById('subreddits-sfw');
+                var nsfwElement = document.getElementById('subreddits-nsfw');
+                for(var i = 0; i < children.length; i++) {
+                    var data = children[i].data;
+                    var name = data.display_name;
+                    var element = category == 'sfw' ? sfwElement : nsfwElement;
+                    var subredditElement = document.createElement('div');
+                    subredditElement.className = 'subreddit';
+                    subredditElement.appendChild(document.createTextNode(name));
+                    element.appendChild(subredditElement);
+                }
+            }
+            
+            function showSubreddits(category) {
+                var sfwElement = document.getElementById('subreddits-sfw');
+                var nsfwElement = document.getElementById('subreddits-nsfw');
+                var sfwTabElement = document.getElementById('subreddits-sfw-tab');
+                var nsfwTabElement = document.getElementById('subreddits-nsfw-tab');
+                sfwElement.className = category == 'sfw' ? 'visible' : '';
+                nsfwElement.className = category == 'nsfw' ? 'visible' : '';
+                sfwTabElement.className = category == 'sfw' ? 'tab selected' : 'tab';
+                nsfwTabElement.className = category == 'nsfw' ? 'tab selected' : 'tab';
+            }
+            
+            function setSubreddit(target) {
+                if(target.className != 'subreddit') return;
+                document.getElementById('subreddit').value = target.textContent;
+                loadHot(target.textContent);
+                document.body.parentElement.scrollTop = 0;
+            }
+        </script>
+        <style>
+            body {
+                padding: 0;
+                overflow-y: scroll;
+            }
+            #controls {
+                text-align: center;
+                margin: 10px;
+                font-family: monospace;
+                font-size: 25px;
+                font-weight: bold;
+            }
+            #controls input {
+                min-width: 200px;
+                height: 40px;
+                margin-left: 3px;
+                padding: 0;
+                padding-left: 5px;
+                font-family: monospace;
+                font-size: 25px;
+                font-weight: bold;
+            }
+            #controls select {
+                cursor: pointer;
+                opacity: 0;
+                width: 1px;
+                height: 1px;
+            }
+            #loader {
+                text-align: center;
+                display: none;
+                margin-top: 20px;
+                margin-bottom: 45px;
+            }
+            #loader.visible {
+                display: block;
+            }
+            #thumbnails {
+                text-align: center;
+            }
+            .thumbnail {
+                display: inline-block;
+                margin: 5px;
+                padding: 5px;
+                overflow: hidden;
+                background-color: #f0f0f0;
+            }
+            .thumbnail .image {
+                width: 200px;
+                height: 200px;
+                overflow: hidden;
+                text-align: center;
+                vertical-align: center;
+            }
+            .thumbnail .image img {
+                min-width: 200px;
+                min-height: 200px;
+            }
+            #preview {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                padding-top: 10px;
+                text-align: center;
+                background-color: rgba(0, 0, 0, 0.9);
+            }
+            #preview.visible {
+                display: block;
+            }
+            #preview-image, #preview-thumbnail {
+                width: 95%;
+                box-shadow: 0 0 10px 2px black;
+                display: none;
+            }
+            #preview-image.visible,  #preview-thumbnail.visible {
+                display: inline;
+            }
+            #preview-loader, #subreddits-loader {
+                text-align: center;
+                padding: 10px;
+                display: none;
+            }
+            #preview-loader.visible, #subreddits-loader.visible {
+                display: block;
+            }
+            #subreddits {
+                text-align: center;
+            }
+            #subreddits-sfw, #subreddits-nsfw {
+                display: none;
+            }
+            #subreddits-sfw.visible, #subreddits-nsfw.visible {
+                display: block;
+            }
+            .subreddit {
+                padding: 10px;
+                font-family: monospace;
+                font-size: 18px;
+                cursor: pointer;
+            }
+            .tabs {
+                margin-top: 20px;
+                margin-bottom: 15px;
+                text-align: center;
+            }
+            .tab {
+                display: inline-block;
+                width: 100px;
+                padding: 5px;
+                border: 2px solid rgba(0, 0, 0, 0);
+                border-bottom: 2px solid #e0e0e0;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+                font-weight: bold;
+                cursor: pointer;
+            }
+            .tab.selected {
+                border: 2px solid #e0e0e0;
+                border-bottom: 2px solid rgba(0, 0, 0, 0);
+            }
+            .tab:hover:not(.selected) {
+                background-color: #fafafa;
+            }
+            #clear {
+                font-size: 35px;
+                font-weight: bold;
+                padding-left: 12px;
+                padding-right: 12px;
+                padding-top: 2px;
+                padding-bottom: 2px;
+                background-color: #f0f0f0;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                cursor: pointer;
+            }
+            #loadmore {
+                text-align: center;
+                margin-top: 20px;
+                margin-bottom: 40px;
+                display: none;
+            }
+            #loadmore.visible {
+                display: block;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="clear" onclick="resetEveryting(); document.body.parentElement.scrollTop = 0;">&times;</div>
+        <div id="preview" onclick="clearPreviewImage()">
+            <img id="preview-thumbnail" src="ajax-loader.gif" />
+            <img id="preview-image" src="ajax-loader.gif" />
+            <div id="preview-loader"><img src="ajax-loader.gif" /></div>
+        </div>
+        <form id="controls" onsubmit="return false;">
+            /r/<input id="subreddit" type="search" placeholder="subreddit" onchange="loadHot(this.value)" value="" />
+        </form>
+        <div id="thumbnails"></div>
+        <div id="loader"><img src="ajax-loader.gif" /></div>
+        <div id="loadmore">
+            <button onclick="loadHot();">Load more</button>
+        </div>
+        <div id="subreddits">
+            <div class="tabs"><span id="subreddits-sfw-tab" onclick="showSubreddits('sfw');" class="tab selected">SFW</span><span id="subreddits-nsfw-tab" onclick="showSubreddits('nsfw');" class="tab">NSFW</span></div>
+            <div onclick="setSubreddit(event.target);">
+                <div id="subreddits-sfw" class="visible"></div>
+                <div id="subreddits-nsfw"></div>
+            </div>
+            <div id="subreddits-loader" class="visible"><img src="ajax-loader.gif" /></div>
+        </div>
+        <script>
+            window.onfocus = resetEveryting; 
+            window.onblur = resetEveryting;
+            loadSubreddits();
+        </script>
+    </body>
+</html>
